@@ -1,2 +1,5 @@
-# AutoMedTS
-AutoMedTS is an AutoML framework tailored for medical time series data. Built upon Auto-sklearn, it offers automated preprocessing, model selection, and ensemble learning to accelerate clinical AI development with minimal code and expert tuning.
+AutoMedTS is an automated machine learning (AutoML) framework tailored for clinical time series analysis.
+Built upon Auto-sklearn, it streamlines data preprocessing, model selection, hyperparameter tuning, and ensemble learning for medical applications — with minimal manual effort.
+
+
+"Automating Clinical Time Series Intelligence."
