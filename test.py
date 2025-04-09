@@ -1,2 +1,2 @@
-import autosklearn
-print("autosklearn loaded from:", autosklearn.__file__)
+import automedts
+print("autosklearn loaded from:", automedts.__file__)

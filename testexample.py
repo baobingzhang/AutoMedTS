@@ -1,4 +1,4 @@
-import autosklearn.classification
+import automedts.classification
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -17,7 +17,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
 print("训练样本数：", X_train.shape[0], "，测试样本数：", X_test.shape[0])
 
 # 构建 AutoML 分类器（可设定运行时间）
-automl = autosklearn.classification.AutoSklearnClassifier(
+automl = automedts.classification.AutoSklearnClassifier(
     time_left_for_this_task=30,              # 总运行时间（秒）
     per_run_time_limit=30,                   # 每个模型评估最大时间
     tmp_folder='/tmp/autosklearn_tmp',       # 中间缓存
