@@ -1,88 +1,65 @@
-import os
-import glob
 import pandas as pd
-import numpy as np
-import random
-
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
+import automedts.classification
+import joblib
+import os
 
-# 替代 autosklearn 的自定义包
-from automedts.classification import automedtsClassifier
+print("1")
+# 1. 加载数据文件路径
+data_dir = './data/surgical_trajectory'  # 当前数据文件所在的目录
+print("2")
+# 区分经验丰富的医生和实习医师的数据集
+exp_files = [f for f in os.listdir(data_dir) if f.endswith('_Exp.csv')]
+nov_files = [f for f in os.listdir(data_dir) if f.endswith('_Nov.csv')]
+print("3")
+# 2. 加载所有经验丰富医生的数据集并合并
+exp_data = pd.concat([pd.read_csv(os.path.join(data_dir, f)) for f in exp_files])
+print("4")
+# 3. 加载所有实习医师的数据集并合并
+nov_data = pd.concat([pd.read_csv(os.path.join(data_dir, f)) for f in nov_files])
+print("5")
+# 4. 将实习医生的数据划分为两部分，一部分用于训练，一部分用于测试
+X_nov = nov_data.iloc[:, :-1]
+y_nov = nov_data.iloc[:, -1]
+print("6")
+X_nov_train, X_nov_test, y_nov_train, y_nov_test = train_test_split(X_nov, y_nov, test_size=0.5, random_state=42)
+print("7")
+# 5. 将经验医生的数据与部分实习医生数据合并，作为新的训练集
+X_train = pd.concat([exp_data.iloc[:, :-1], X_nov_train])
+y_train = pd.concat([exp_data.iloc[:, -1], y_nov_train])
+print("8")
+# 剩下的实习医生数据作为测试集
+X_test = X_nov_test
+y_test = y_nov_test
 
-# ✅ 设置随机种子，保证可复现性
-SEED = 42
-random.seed(SEED)
-np.random.seed(SEED)
+print("9")
 
-# 数据路径
-data_dir = "data/Surgical_trajectory"
-all_files = glob.glob(os.path.join(data_dir, "*.csv"))
 
-# ✅ 按 subject 文件名组织
-subject_data = {}
-for file_path in all_files:
-    subject_id = os.path.basename(file_path).split("_")[0]  # e.g., 'subject-03'
-    df = pd.read_csv(file_path)
-    subject_data.setdefault(subject_id, []).append(df)
-
-# ✅ 合并同一 subject 下的所有片段（如 subject-04 有多个片段）
-subject_data = {
-    k: pd.concat(v, ignore_index=True)
-    for k, v in subject_data.items()
-}
-
-# ✅ 拆分：按 subject 名称划分训练 / 测试集（8:2）
-subject_ids = sorted(subject_data.keys())
-random.shuffle(subject_ids)
-split_idx = int(len(subject_ids) * 0.8)
-train_ids = subject_ids[:split_idx]
-test_ids = subject_ids[split_idx:]
-
-print("Train subjects:", train_ids)
-print("Test subjects:", test_ids)
-
-# 构造训练集
-train_df = pd.concat([subject_data[sid] for sid in train_ids], ignore_index=True)
-test_df = pd.concat([subject_data[sid] for sid in test_ids], ignore_index=True)
-
-# ✅ 打印列名确认
-print("Train columns:", train_df.columns)
-
-# ✅ 划分特征和标签（这里 label 是你的目标列）
-assert "labels" in train_df.columns, "Missing 'label' column in training data"
-X_train = train_df.drop(columns=["labels"])
-y_train = train_df["labels"]
-
-assert "labels" in test_df.columns, "Missing 'label' column in testing data"
-X_test = test_df.drop(columns=["labels"])
-y_test = test_df["labels"]
-
-print("Training samples shape:", X_train.shape)
-print("Testing samples shape:", X_test.shape)
-
-# ✅ 构建 AutoML 模型
-automl = automedtsClassifier(
-    time_left_for_this_task=600,             # 总运行时间（秒）
-    per_run_time_limit=30,                  # 每次训练的最长时间
-    ensemble_kwargs={"ensemble_size": 10},  # 避免弃用警告
-    seed=SEED,
-    tmp_folder="/tmp/automedts_tmp",        # 临时缓存
+# 6. 创建AutoML分类器并训练，增加总时间
+automl = automedts.classification.automedtsClassifier(
+    time_left_for_this_task=300,  # 训练总时间增加到3600秒（1小时）
+    per_run_time_limit=120,        # 每个模型的最大运行时间（秒）
+    ensemble_kwargs={'ensemble_size': 50}  # 集成模型参数
 )
-
-print("Training the AutoML classifier...")
+print("10")
+# 训练模型
 automl.fit(X_train, y_train)
-print("Training complete!")
-
-# ✅ 开始预测
+print("11")
+# 保存模型
+joblib.dump(automl, 'surgery_stage_model.pkl')
+print("Model saved as 'surgery_stage_model.pkl'")
+print("12")
+# 7. 使用模型对剩余的实习医师数据进行预测
 y_pred = automl.predict(X_test)
-print("Predicting complete.")
+print("13")
 
-# ✅ 输出评估结果
-print("Classification Report:")
+# 8. 评估模型性能
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy on novice dataset: {accuracy}")
 print(classification_report(y_test, y_pred))
-print("Accuracy:", accuracy_score(y_test, y_pred))
+print("14")
 
-# ✅ 展示模型细节
-print("Final ensemble models:")
+# 9. 显示使用的模型组合信息
+print("Model composition summary:")
 print(automl.show_models())
