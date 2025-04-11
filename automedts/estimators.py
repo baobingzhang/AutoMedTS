@@ -15,6 +15,7 @@ from typing import (
 )
 
 import warnings
+import sys
 
 import dask.distributed
 import joblib
@@ -42,6 +43,8 @@ from automedts.ensembles.multiobjective_dummy_ensemble import (
 from automedts.metrics import Scorer
 from automedts.pipeline.base import BasePipeline
 from automedts.util.smac_wrap import SMACCallback
+from automedts.util.sliding_window import apply_sliding_window
+
 
 
 class automedtsEstimator(BaseEstimator):
@@ -1350,7 +1353,7 @@ class automedtsEstimator(BaseEstimator):
         feat_type: Optional[List[str]] = None,
     ) -> ConfigurationSpace:
         """
-        Returns the Configuration Space object, from which Auto-Sklearn
+        Returns the Configuration Space object, from which AutoMedTS
         will sample configurations and build pipelines.
 
         Parameters
@@ -1365,7 +1368,7 @@ class automedtsEstimator(BaseEstimator):
         y_test : array-like, shape = [n_samples] or [n_samples, n_outputs]
             Array with the problem labels for the testing split
         dataset_name: Optional[str]
-            A string to tag the Auto-Sklearn run
+            A string to tag the AutoMedTS run
         """
         if self.automl_ is None:
             self.automl_ = self.build_automl()
@@ -1392,7 +1395,7 @@ class automedtsClassifier(automedtsEstimator, ClassifierMixin):
     """This class implements the classification task."""
 
     def fit(self, X, y, X_test=None, y_test=None, feat_type=None, dataset_name=None):
-        """Fit *auto-sklearn* to given training set (X, y).
+        """Fit *AutoMedTS* to given training set (X, y).
 
         Fit both optimizes the machine learning models and builds an ensemble
         out of them.
@@ -1468,52 +1471,232 @@ class automedtsClassifier(automedtsEstimator, ClassifierMixin):
 
         return self
 
-    def predict(self, X, batch_size=None, n_jobs=1):
-        """Predict classes for X.
+    # def predict(self, X, *, y=None, batch_size=None, n_jobs=1):
+    #     """Predict classes for X.
+
+    #     Parameters
+    #     ----------
+    #     X : array-like or sparse matrix of shape = [n_samples, n_features]
+
+    #     Returns
+    #     -------
+    #     y : array of shape = [n_samples] or [n_samples, n_labels]
+    #         The predicted classes.
+    #     """
+    #     return super().predict(X, batch_size=batch_size, n_jobs=n_jobs)
+    
+    # def predict(self, X, *, y=None, batch_size=None, n_jobs=1):
+    #     """
+    #     Predict classes for X. Supports optional sliding window processing and returns smoothed labels.
+
+    #     Parameters
+    #     ----------
+    #     X : array-like or sparse matrix of shape = [n_samples, n_features]
+    #     y : array-like, optional
+    #         Ground truth labels. If provided, will be processed with sliding window and returned.
+    #     batch_size : int, optional
+    #         Batch size for prediction.
+    #     n_jobs : int, default=1
+    #         Number of parallel processes to use for prediction.
+
+    #     Returns
+    #     -------
+    #     y_pred : np.ndarray
+    #         Predicted class labels.
+    #     y_slided : np.ndarray or None
+    #         Sliding window processed labels, returned only if input y is provided.
+    #     """
+
+    #     # === STEP 1: 滑动窗口处理（如果启用） ===
+    #     if getattr(self, "_enable_sliding_window", False):
+    #         if y is not None:
+    #             X, y_slided = apply_sliding_window(
+    #                 X, y,
+    #                 window_size=self._window_size,
+    #                 step_size=self._step_size
+    #             )
+    #         else:
+    #             X, _ = apply_sliding_window(
+    #                 X, None,
+    #                 window_size=self._window_size,
+    #                 step_size=self._step_size
+    #             )
+    #             y_slided = None
+
+    #         print(f"[DEBUG] Sliding Window Applied in predict(): X.shape = {X.shape}")
+    #     else:
+    #         y_slided = y
+
+    #     # # STEP 2: 检查特征维度是否匹配
+    #     expected_features = self.automl_._n_features_after_windowing
+
+    #     print(expected_features)
+    #     print(X.shape)
+    #     input()
+    #     sys.exit()
+
+    #     if X.shape[1] != expected_features:
+    #         raise ValueError(
+    #             f"[❌] Feature mismatch: expected {expected_features} features, but got {X.shape[1]}"
+    #         )
+
+    #     # === STEP 3: 调用父类 AutoML 的 predict 方法 ===
+    #     y_pred = super().predict(X, batch_size=batch_size, n_jobs=n_jobs)
+
+    #     # === STEP 4: 返回预测结果 和 滑窗后的标签（如果有） ===
+    #     return y_pred, y_slided
+    
+
+    def predict(self, X, *, y=None, batch_size=None, n_jobs=1):
+        """
+        Predict classes for X. Supports optional sliding window processing and returns smoothed labels.
 
         Parameters
         ----------
         X : array-like or sparse matrix of shape = [n_samples, n_features]
+            Input test data.
+        y : array-like, optional
+            Ground truth labels corresponding to X. If provided, it will be processed 
+            with the sliding window transformation and returned as y_slided.
+        batch_size : int, optional
+            Batch size for prediction. (Used by the underlying model pipelines.)
+        n_jobs : int, default=1
+            Number of parallel processes to use for prediction.
 
         Returns
         -------
-        y : array of shape = [n_samples] or [n_samples, n_labels]
-            The predicted classes.
+        y_pred : np.ndarray
+            Predicted class labels.
+        y_slided : np.ndarray or None
+            The labels after sliding window processing, if y was provided; otherwise, None.
         """
-        return super().predict(X, batch_size=batch_size, n_jobs=n_jobs)
 
+        # --- STEP 1: 从 self.automl_ 中获取滑动窗口参数 ---
+        window_size = getattr(self.automl_, "_window_size", None)
+        step_size = getattr(self.automl_, "_step_size", None)
+        enable_sliding = getattr(self.automl_, "_enable_sliding_window", False)
+
+        # --- STEP 2: 滑动窗口处理（如果启用） ---
+        if enable_sliding and window_size is not None and step_size is not None:
+            if y is not None:
+                X, y_slided = apply_sliding_window(
+                    X, y,
+                    window_size=window_size,
+                    step_size=step_size
+                )
+            else:
+                X, _ = apply_sliding_window(
+                    X, None,
+                    window_size=window_size,
+                    step_size=step_size
+                )
+                y_slided = None
+
+            # print(f"[DEBUG] Sliding Window Applied in predict(): X.shape = {X.shape}")
+        else:
+            y_slided = y  # 如果滑动窗口未启用，则直接返回 y
+
+        # --- STEP 3: 检查特征维度是否一致 ---
+        expected_features = getattr(self.automl_, "_n_features_after_windowing", None)
+        if expected_features is not None and X.shape[1] != expected_features:
+            raise ValueError(
+                f"[❌] Feature mismatch: expected {expected_features} features, but got {X.shape[1]}"
+            )
+
+        # --- STEP 4: 调用父类 AutoML 的 predict 方法进行预测 ---
+        y_pred = super().predict(X, batch_size=batch_size, n_jobs=n_jobs)
+
+        # --- STEP 5: 返回预测结果和滑动窗口处理后的标签 ---
+        return y_pred, y_slided
+
+
+
+
+
+    # def predict_proba(self, X, batch_size=None, n_jobs=1):
+    #     """Predict probabilities of classes for all samples X.
+
+    #     Parameters
+    #     ----------
+    #     X : array-like or sparse matrix of shape = [n_samples, n_features]
+
+    #     batch_size : int (optional)
+    #         Number of data points to predict for (predicts all points at once
+    #         if ``None``.
+    #     n_jobs : int
+
+    #     Returns
+    #     -------
+    #     y : array of shape = [n_samples, n_classes] or [n_samples, n_labels]
+    #         The predicted class probabilities.
+    #     """
+    #     pred_proba = super().predict_proba(X, batch_size=batch_size, n_jobs=n_jobs)
+
+    #     # Check if all probabilities sum up to 1.
+    #     # Assert only if target type is not multilabel-indicator.
+    #     if self.target_type not in ["multilabel-indicator"]:
+    #         assert np.allclose(
+    #             np.sum(pred_proba, axis=1), np.ones_like(pred_proba[:, 0])
+    #         ), "prediction probability does not sum up to 1!"
+
+    #     # Check that all probability values lie between 0 and 1.
+    #     assert (pred_proba >= 0).all() and (
+    #         pred_proba <= 1
+    #     ).all(), "found prediction probability value outside of [0, 1]!"
+
+    #     return pred_proba
+    
     def predict_proba(self, X, batch_size=None, n_jobs=1):
-        """Predict probabilities of classes for all samples X.
+        """
+        Predict class probabilities for all samples X. Automatically applies sliding window transformation if enabled.
 
         Parameters
         ----------
         X : array-like or sparse matrix of shape = [n_samples, n_features]
 
         batch_size : int (optional)
-            Number of data points to predict for (predicts all points at once
-            if ``None``.
+            Number of data points to predict per batch (None means predict all at once).
         n_jobs : int
+            Number of parallel processes to use for prediction.
 
         Returns
         -------
         y : array of shape = [n_samples, n_classes] or [n_samples, n_labels]
             The predicted class probabilities.
         """
+
+        # === STEP 1: 滑动窗口处理（如果启用） ===
+        if getattr(self, "_enable_sliding_window", False):
+            X, _ = apply_sliding_window(
+                X,
+                y=None,
+                window_size=self._window_size,
+                step_size=self._step_size
+            )
+            print(f"[DEBUG] Sliding Window Applied for Predict_Proba: X.shape = {X.shape}")
+
+        # === STEP 2: 与训练维度进行匹配 ===
+        expected_features = self.InputValidator.feature_validator.input_shape_[0]
+        if X.shape[1] != expected_features:
+            raise ValueError(
+                f"❌ Feature dimension mismatch during predict_proba: "
+                f"Expected {expected_features} features, but got {X.shape[1]}."
+            )
+
+        # === STEP 3: 调用父类预测方法 ===
         pred_proba = super().predict_proba(X, batch_size=batch_size, n_jobs=n_jobs)
 
-        # Check if all probabilities sum up to 1.
-        # Assert only if target type is not multilabel-indicator.
+        # === STEP 4: 概率合法性检查 ===
         if self.target_type not in ["multilabel-indicator"]:
             assert np.allclose(
                 np.sum(pred_proba, axis=1), np.ones_like(pred_proba[:, 0])
             ), "prediction probability does not sum up to 1!"
 
-        # Check that all probability values lie between 0 and 1.
-        assert (pred_proba >= 0).all() and (
-            pred_proba <= 1
-        ).all(), "found prediction probability value outside of [0, 1]!"
+        assert (pred_proba >= 0).all() and (pred_proba <= 1).all(), \
+            "found prediction probability value outside of [0, 1]!"
 
         return pred_proba
+
 
     def _get_automl_class(self):
         return AutoMLClassifier

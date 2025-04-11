@@ -17,10 +17,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
 print("训练样本数：", X_train.shape[0], "，测试样本数：", X_test.shape[0])
 
 # 构建 AutoML 分类器（可设定运行时间）
-automl = automedts.classification.AutoSklearnClassifier(
-    time_left_for_this_task=30,              # 总运行时间（秒）
+automl = automedts.classification.automedtsClassifier(
+    time_left_for_this_task=600,              # 总运行时间（秒）
     per_run_time_limit=30,                   # 每个模型评估最大时间
-    tmp_folder='/tmp/autosklearn_tmp',       # 中间缓存
+    tmp_folder='/tmp/automedts_tmp',       # 中间缓存
     disable_evaluator_output=False,          # 显示过程
     ensemble_size=10,                        # 显式设置集成规模（防止时间用光没集成）
     seed=1

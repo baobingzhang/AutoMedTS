@@ -26,6 +26,7 @@ import types
 import uuid
 import warnings
 
+
 import distro
 import joblib
 import numpy as np
@@ -57,6 +58,7 @@ from smac.tae import StatusType
 from typing_extensions import Literal
 
 from automedts.automl_common.common.utils.backend import Backend, create
+from automedts.util.sliding_window import apply_sliding_window
 
 from automedts.constants import (
     BINARY_CLASSIFICATION,
@@ -242,6 +244,10 @@ class AutoML(BaseEstimator):
         dataset_compression: bool | Mapping[str, Any] = True,
         allow_string_features: bool = True,
         disable_progress_bar: bool = False,
+        # sliding window parameter
+        window_size: int = 10,
+        step_size: int = 1,
+        enable_sliding_window: bool = True,
     ):
         super().__init__()
 
@@ -353,6 +359,11 @@ class AutoML(BaseEstimator):
         # identifier for each configuration saved to disk
         self.num_run = 0
         self.fitted = False
+        # sliding window parameter
+        self._enable_sliding_window = enable_sliding_window
+        self._window_size = window_size
+        self._step_size = step_size
+        self._n_features_after_windowing = None
 
     def _get_logger(self, name: str) -> PicklableClientLogger:
         logger_name = "AutoML(%d):%s" % (self._seed, name)
@@ -601,6 +612,38 @@ class AutoML(BaseEstimator):
         -------
         self
         """
+        # === STEP: Apply Sliding Window Transformation ===
+        # 先检查是否启用了滑动窗口处理，如果启用，则对 X 和 y 进行转换，
+        # 这样后续所有操作（例如任务类型判断等）将基于窗口化后的数据进行。
+        if self._enable_sliding_window:
+            X, y = apply_sliding_window(
+                X, y,
+                window_size=self._window_size,
+                step_size=self._step_size
+            )
+            if X_test is not None and y_test is not None:
+                X_test, y_test = apply_sliding_window(
+                    X_test, y_test,
+                    window_size=self._window_size,
+                    step_size=self._step_size
+                )
+        # 在 AutoML.fit(...) 最末尾添加：
+        self._n_features_after_windowing = X.shape[1]   
+
+        # # === END Sliding Window Transformation ===
+
+        # # === Debug: Print shape after sliding window ===
+        # print(f"[DEBUG] Sliding Window Applied: X.shape = {X.shape}, y.shape = {y.shape}")
+        # if X_test is not None and y_test is not None:
+        #     print(f"[DEBUG] Sliding Window Applied (Test): X_test.shape = {X_test.shape}, y_test.shape = {y_test.shape}")
+        # # ===============================================
+
+        # print("zhe li")
+        # input()
+        # sys.exit()
+
+
+
         if (X_test is not None) ^ (y_test is not None):
             raise ValueError("Must provide both X_test and y_test together")
 
@@ -618,6 +661,8 @@ class AutoML(BaseEstimator):
             self._task = self._task_type_id(y_task)
         else:
             self._task = task
+
+
 
         # Assign a metric if it doesnt exist
         if self._metrics is None:
@@ -670,6 +715,7 @@ class AutoML(BaseEstimator):
 
             if X_test is not None and y_test is not None:
                 X_test, y_test = self.InputValidator.transform(X_test, y_test)
+
 
             # We don't support size reduction on pandas type object yet
             if (
@@ -1451,6 +1497,21 @@ class AutoML(BaseEstimator):
                 "predict() can only be called after performing fit(). Kindly call "
                 "the estimator fit() method first."
             )
+        
+        #  # -------------------- Sliding Window 插入 START ------------------------
+        # if getattr(self, "_enable_sliding_window", False):
+        #     X,_ = apply_sliding_window(
+        #         X=X,
+        #         y=None,
+        #         window_size=self._window_size,
+        #         step_size=self._step_size,
+        #     )
+        #     print(f"[DEBUG] Sliding Window Applied in predict(): X.shape = {X.shape}")
+        #  # -------------------- Sliding Window 插入 END --------------------------
+
+        # input()
+        # sys.exit()
+
         X = self.InputValidator.feature_validator.transform(X)
 
         # Parallelize predictions across models with n_jobs processes.
