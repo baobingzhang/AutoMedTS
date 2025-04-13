@@ -9,6 +9,7 @@ import os
 import time
 import traceback
 import warnings
+logging.getLogger("Client-AutoMLSMBO").setLevel(logging.ERROR)
 
 import dask.distributed
 import pynisher

@@ -38,7 +38,7 @@ y_test = y_nov_test
 automl = automedts.classification.automedtsClassifier(
     time_left_for_this_task=300,  # 训练总时间增加到3600秒（1小时）
     per_run_time_limit=120,        # 每个模型的最大运行时间（秒）
-    ensemble_kwargs={'ensemble_size': 50}  # 集成模型参数
+    ensemble_kwargs={'ensemble_size': 100}  # 集成模型参数
 )
 
 # 7. 训练模型

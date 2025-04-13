@@ -49,7 +49,7 @@ class SimpleClassificationPipeline(BasePipeline, ClassifierMixin):
     ----------
     _estimator : The underlying scikit-learn classification model. This
         variable is assigned after a call to the
-        :meth:`automedts.pipeline.classification.SimpleClassificationPipeline
+        :meth:`automedts.pipeline.classification.SimpleClassificationPipeline体想插入的功能，我可以直接
         .fit` method.
 
     _preprocessor : The underlying scikit-learn preprocessing algorithm. This
@@ -76,7 +76,7 @@ class SimpleClassificationPipeline(BasePipeline, ClassifierMixin):
         steps=None,
         dataset_properties=None,
         include=None,
-        exclude=None,
+        exclude=["qda", "bernoulli_nb", "multinomial_nb", "lda", "sgd"], 
         random_state: Optional[Union[int, np.random.RandomState]] = None,
         init_params=None,
     ):
@@ -207,10 +207,11 @@ class SimpleClassificationPipeline(BasePipeline, ClassifierMixin):
             cs=cs,
             feat_type=feat_type,
             dataset_properties=dataset_properties,
-            exclude=exclude,
+            exclude=exclude, 
             include=include,
             pipeline=self.steps,
         )
+        
 
         classifiers = cs.get_hyperparameter("classifier:__choice__").choices
         preprocessors = cs.get_hyperparameter("feature_preprocessor:__choice__").choices

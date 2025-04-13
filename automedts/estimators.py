@@ -43,7 +43,7 @@ from automedts.ensembles.multiobjective_dummy_ensemble import (
 from automedts.metrics import Scorer
 from automedts.pipeline.base import BasePipeline
 from automedts.util.smac_wrap import SMACCallback
-from automedts.util.sliding_window import apply_sliding_window
+from automedts.util.sliding_window import apply_sliding_window, apply_balanced_sliding_window
 
 
 
@@ -1579,13 +1579,13 @@ class automedtsClassifier(automedtsEstimator, ClassifierMixin):
         # --- STEP 2: 滑动窗口处理（如果启用） ---
         if enable_sliding and window_size is not None and step_size is not None:
             if y is not None:
-                X, y_slided = apply_sliding_window(
+                X, y_slided = apply_balanced_sliding_window(
                     X, y,
                     window_size=window_size,
                     step_size=step_size
                 )
             else:
-                X, _ = apply_sliding_window(
+                X, _ = apply_balanced_sliding_window(
                     X, None,
                     window_size=window_size,
                     step_size=step_size
