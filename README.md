@@ -1,8 +1,8 @@
 
-
 <p align="center">
-  ![AiLap Logo](./ailap_logo.png)
+  <img src="https://raw.githubusercontent.com/baobingzhang/AutoMedTS/main/ailap_logo.png" alt="AiLap Logo" width="180"/>
 </p>
+
 
 
 
