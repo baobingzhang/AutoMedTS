@@ -42,3 +42,20 @@ git clone https://github.com/your-username/AutoMedTS.git
 cd AutoMedTS
 pip install -e .
 
+
+
+```bash
+import pandas as pd
+from automedts.classification import AutoMedTSClassifier
+
+# 1. Load your surgical trajectory data (features in all cols except last, labels in last col)
+df = pd.read_csv("data/surgical_trajectory/Nov_01_Nov.csv")
+X, y = df.iloc[:, :-1].values, df.iloc[:, -1].values
+
+# 2. Instantiate and train the AutoMedTS classifier (300 s total, 30 s per model)
+clf = AutoMedTSClassifier(time_left_for_this_task=300, per_run_time_limit=30)
+clf.fit(X, y)
+
+# 3. (Optional) Predict on new data
+# y_pred, _ = clf.predict(X_new, y=y_new)
+
