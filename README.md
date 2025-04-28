@@ -44,7 +44,10 @@ pip install -e .
 
 
 
-```bash
+
+## 🔧 Example
+
+```python
 import pandas as pd
 from automedts.classification import AutoMedTSClassifier
 
@@ -58,4 +61,11 @@ clf.fit(X, y)
 
 # 3. (Optional) Predict on new data
 # y_pred, _ = clf.predict(X_new, y=y_new)
+```
+
+
+
+
+
+
 
