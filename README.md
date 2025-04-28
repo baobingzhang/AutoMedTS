@@ -1,8 +1,9 @@
 
 
 <p align="center">
-  <img src="./ailap_logo.png" alt="AiLap Logo" width="180"/>
+  ![AiLap Logo](./ailap_logo.png)
 </p>
+
 
 
 # AutoMedTS
