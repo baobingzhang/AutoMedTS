@@ -9,7 +9,7 @@
 # AutoMedTS
 
 > **Automating Clinical Time Series Intelligence**  
-> An end-to-end AutoML framework tailored for clinical time-series data. Streamline data preprocessing, model selection, hyperparameter optimization, and uncertainty-aware ensembling—minimal manual effort required. Originally developed to deliver real-time action recognition and feedback
+> An end-to-end automated ML framework tailored for clinical time-series data. Streamline data preprocessing, model selection, hyperparameter optimization, and uncertainty-aware ensembling—minimal manual effort required. Originally developed to deliver real-time action recognition and feedback
 in laparoscopic surgery training. It integrates multiple class-imbalance handling strategies (including power transform, temperature-scaled softmax, and SMOTE). AutoMedTS automatically searches for optimal models and hyperparameters, providing an end-to-end pipeline for training and inference. The framework is easily extensible to other medical time-series tasks and offers comprehensive evaluation metrics (Macro-F1, Balanced Accuracy, MCC) along with visualization tools for performance analysis and feedback.
 
 ---
