@@ -58,8 +58,8 @@ from smac.tae import StatusType
 from typing_extensions import Literal
 
 from automedts.automl_common.common.utils.backend import Backend, create
-from automedts.util.sliding_window import apply_sliding_window, apply_balanced_sliding_window
 from imblearn.over_sampling import SMOTE
+from automedts.util.sliding_window import create_windows, window_and_balance
 
 from automedts.constants import (
     BINARY_CLASSIFICATION,
@@ -612,30 +612,28 @@ class AutoML(BaseEstimator):
         Returns
         -------
         self
-        """
-        # === STEP: Apply Sliding Window Transformation ===
-        # 先检查是否启用了滑动窗口处理，如果启用，则对 X 和 y 进行转换，
-        # 这样后续所有操作（例如任务类型判断等）将基于窗口化后的数据进行。
+        """ 
+
+
+        # === STEP: Apply Sliding Window + Balance on TRAIN ===
         if self._enable_sliding_window:
-            X, y = apply_balanced_sliding_window(
+
+            X, y = window_and_balance(
                 X, y,
                 window_size=self._window_size,
-                step_size=self._step_size
+                step_size=self._step_size,
+                strategy="softmax"
             )
+
             if X_test is not None and y_test is not None:
-                X_test, y_test = apply_balanced_sliding_window(
+                X_test, y_test = create_windows(
                     X_test, y_test,
                     window_size=self._window_size,
-                    step_size=self._step_size
+                    step=self._step_size
                 )
-        # 在 AutoML.fit(...) 最末尾添加：
-        self._n_features_after_windowing = X.shape[1]   
 
-        # print("zhe li")
-        # input()
-        # sys.exit()
-
-
+        # Record the feature dimensions after windowing (and balancing)
+        self._n_features_after_windowing = X.shape[1]
 
         if (X_test is not None) ^ (y_test is not None):
             raise ValueError("Must provide both X_test and y_test together")
@@ -654,7 +652,6 @@ class AutoML(BaseEstimator):
             self._task = self._task_type_id(y_task)
         else:
             self._task = task
-
 
 
         # Assign a metric if it doesnt exist
@@ -1015,6 +1012,17 @@ class AutoML(BaseEstimator):
             self._fit_cleanup()
 
         self.fitted = True
+         # [i] New code: Save performance_over_time_ DataFrame
+        try:
+            # Get the directory where the current script is located
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            perf_df = self.performance_over_time_
+            perf_csv = os.path.join(script_dir, "performance_over_time.csv")
+            perf_df.to_csv(perf_csv, index=True)
+            self._logger.info(f"Saved performance_over_time_ to {perf_csv}")
+        except Exception as e:
+            self._logger.error(f"Failed to save performance_over_time_: {e}")
+        # end [i]
 
         return self
 

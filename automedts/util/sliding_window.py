@@ -1,122 +1,184 @@
 import numpy as np
-from sklearn.utils import resample
-from collections import defaultdict
+from collections import Counter
+from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTETomek
+from imblearn.under_sampling import RandomUnderSampler
 
-
-def apply_sliding_window(X, y=None, window_size: int = 10, step_size: int = 1):
+def create_windows(X, y=None, window_size=10, step=1):
     """
-    Applies a sliding window transformation to tabular data, with optional majority voting for labels.
-    
-    Parameters:
-        X (array-like): Input features with shape (n_samples, n_features).
-        y (array-like or None): Input labels with shape (n_samples,). If None, only X is transformed.
-        window_size (int): The number of consecutive rows to group as one sample.
-        step_size (int): The sliding step size.
-    
+    Slide a window over X (n_samples, n_features), optionally y (n_samples,).
     Returns:
-        new_X (np.ndarray): Transformed features with shape (n_windows, window_size * n_features).
-        new_y (np.ndarray or None): Transformed labels, or None if y is None.
+      X_win: np.ndarray of shape (n_windows, window_size * n_features)
+      y_win: np.ndarray of shape (n_windows,) or None
     """
-    X = np.asarray(X)
-    n_samples, n_features = X.shape
-    n_windows = (n_samples - window_size) // step_size + 1
-
-    new_X = []
-    new_y = [] if y is not None else None
-
-    # Convert y to numpy array only if provided
-    if y is not None:
-        y = np.asarray(y)
-
-    for start in range(0, n_samples - window_size + 1, step_size):
-        end = start + window_size
-        window = X[start:end]
-        new_X.append(window.flatten())
-
+    n_samples, _ = X.shape
+    Xw, yw = [], []
+    for i in range(0, n_samples - window_size + 1, step):
+        win = X[i : i + window_size].reshape(-1)
+        Xw.append(win)
         if y is not None:
-            window_labels = y[start:end]
-            unique_labels, counts = np.unique(window_labels, return_counts=True)
-            mode_label = unique_labels[np.argmax(counts)]
-            new_y.append(mode_label)
+            yw.append(y[i + window_size - 1])
+    Xw = np.stack(Xw, axis=0)
+    yw = np.array(yw) if y is not None else None
+    return Xw, yw
 
-    return (
-        np.array(new_X),
-        np.array(new_y) if y is not None else None
-    )
-
-
-
-
-def apply_balanced_sliding_window(X, y=None, window_size: int = 10, step_size: int = 1, max_per_class: int = 1000):
+def augment_jitter(X, y, sigma=0.02, random_state=42):
     """
-    Applies a class-balanced sliding window transformation.
-    Ensures each class contributes a balanced number of windows to reduce class imbalance.
-
-    Parameters:
-        X (array-like): Input features with shape (n_samples, n_features).
-        y (array-like or None): Input labels with shape (n_samples,). If None, only X is transformed.
-        window_size (int): Number of time steps in each window.
-        step_size (int): Step size between windows.
-        max_per_class (int): Maximum number of sliding windows to sample per class.
-
-    Returns:
-        new_X (np.ndarray): Transformed feature vectors with shape (n_windows, window_size * n_features).
-        new_y (np.ndarray or None): Majority-voted labels for each window, or None if y is None.
+    Add Gaussian noise to frames of the minority class (frame-level jitter).
+    Returns augmented X and y.
     """
-    X = np.asarray(X)
-    if y is None:
-        # 无标签模式：整体滑窗（与原函数一致）
-        n_samples, n_features = X.shape
-        new_X = []
-        for start in range(0, n_samples - window_size + 1, step_size):
-            window = X[start:start+window_size]
-            new_X.append(window.flatten())
-        return np.array(new_X), None
+    rng = np.random.default_rng(random_state)
+    classes, counts = np.unique(y, return_counts=True)
+    minority = classes[np.argmin(counts)]
+    mask = (y == minority)
+    X_min = X[mask]
+    noise = rng.normal(0, sigma, X_min.shape)
+    X_aug = np.vstack([X, X_min + noise])
+    y_aug = np.hstack([y, y[mask]])
+    return X_aug, y_aug
 
-    y = np.asarray(y)
-    unique_classes = np.unique(y)
-    new_X, new_y = [], []
+def _map_power(props, gamma):
+    p = np.power(props, gamma)
+    return p / p.sum()
 
-    for cls in unique_classes:
-        # 当前类别对应的所有索引
-        cls_indices = np.where(y == cls)[0]
+def _map_softmax(props, T):
+    logp = np.log(props + 1e-12) / T
+    q = np.exp(logp)
+    return q / q.sum()
 
-        # 要求窗口必须连续，所以截取连续片段
-        cls_X = X[cls_indices]
-        cls_y = y[cls_indices]
+def _map_linear(props, alpha):
+    K = len(props)
+    return (1 - alpha) * props + alpha * (1.0 / K)
 
-        n_samples = cls_X.shape[0]
-        if n_samples < window_size:
-            continue  # 跳过过短类别
 
-        # 类内滑窗
-        class_X_windows = []
-        class_y_windows = []
-        for start in range(0, n_samples - window_size + 1, step_size):
-            window_X = cls_X[start:start + window_size]
-            window_y = cls_y[start:start + window_size]
 
-            class_X_windows.append(window_X.flatten())
-            # 多数投票
-            unique_labels, counts = np.unique(window_y, return_counts=True)
-            class_y_windows.append(unique_labels[np.argmax(counts)])
+def window_and_balance(
+    X, y,
+    window_size, step_size,
+    strategy="softmax",    # mapping strategy
+    gamma=0.7, T=2.0, alpha=0.2,
+    sigma=0.02,
+    random_state=42
+):
+    """
+    1) Frame-level jitter augmentation on minority
+    2) Window slicing
+    3) Distribution mapping (power, softmax, or linear)
+    4) Per-class over/under-sampling to match mapped proportions
+       - When filling minority class, you can switch internally between 'replication + jitter' or 'SMOTE oversampling'
+    """
+    rng = np.random.default_rng(random_state)
 
-        # 类别窗口采样（平衡）
-        if len(class_X_windows) > max_per_class:
-            X_sampled, y_sampled = resample(
-                class_X_windows, class_y_windows,
-                n_samples=max_per_class, replace=False, random_state=42
-            )
+    # === Internal switch: use SMOTE or replication + jitter for minority class oversampling ===
+    USE_SMOTE_OVERSAMPLING = False
+
+    # Control whether to apply jitter to SMOTE oversampled samples
+    USE_JITTER_OVERSAMPLING = False
+
+    BALANCE = True
+
+    # --- Sliding windows only, no balancing ---
+    if not BALANCE:
+        print("Sliding windows only")
+        X_win, y_win = create_windows(X, y, window_size, step_size)
+        return X_win, y_win
+
+    # 1) augment minority frames
+    X_aug, y_aug = augment_jitter(X, y, sigma=sigma, random_state=random_state)
+
+    # print("Test")
+
+    # 2) window slicing
+    X_win, y_win = create_windows(X_aug, y_aug, window_size, step_size)
+    N = len(y_win)
+
+    # 3) compute original proportions & map
+    classes, counts = np.unique(y_win, return_counts=True)
+    props = counts / counts.sum()
+    if strategy == "power":
+        # print("power")
+        new_props = _map_power(props, gamma)
+    elif strategy == "softmax":
+        # print("softmax")
+        new_props = _map_softmax(props, T)
+    elif strategy == "linear":
+        # print("linear")
+        new_props = _map_linear(props, alpha)
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+
+    # 4) determine target counts
+    target = np.floor(new_props * N).astype(int)
+    diff = N - target.sum()
+    if diff > 0:
+        target[np.argmax(target)] += diff
+
+    # 5) per-class resampling
+    X_parts, y_parts = [], []
+    for cls, orig_n, tgt_n in zip(classes, counts, target):
+        idx = np.where(y_win == cls)[0]
+
+        # 5a) More than target, random undersampling
+        if orig_n >= tgt_n:
+            sel = rng.choice(idx, size=tgt_n, replace=False)
+            X_parts.append(X_win[sel])
+            y_parts.append(np.full(tgt_n, cls))
+
+        # 5b) Less than target, choose internal strategy
         else:
-            X_sampled, y_sampled = resample(
-                class_X_windows, class_y_windows,
-                n_samples=max_per_class, replace=True, random_state=42
-            )
+            # -- Option A: replication + jitter --
+            if not USE_SMOTE_OVERSAMPLING:
+                # print("Not SMOTE")
+                # First keep all
+                X_parts.append(X_win[idx])
+                y_parts.append(np.full(orig_n, cls))
+                # Then replicate windows from idx and add noise to make up
+                needed = tgt_n - orig_n
+                pick   = rng.choice(idx, size=needed, replace=True)
+                noise  = rng.normal(0, sigma, (needed, X_win.shape[1]))
+                X_parts.append(X_win[pick] + noise)
+                y_parts.append(np.full(needed, cls))
 
-        new_X.extend(X_sampled)
-        new_y.extend(y_sampled)
+            # -- Option B: SMOTE oversampling --
+            else:
+                # For classes below target count, use SMOTE to augment
+                from imblearn.over_sampling import SMOTE
+                print(f"SMOTE oversampling for class {cls}")
 
-    return np.array(new_X), np.array(new_y)
+                # Prepare current minority class window data
+                X_minority = X_win[idx]
+                y_minority = np.full(orig_n, cls)
+
+                # SMOTE sampling target count = tgt_n - orig_n
+                sm = SMOTE(
+                    sampling_strategy={cls: tgt_n},
+                    random_state=random_state
+                )
+
+                # SMOTE requires all windows and labels as input: here we use full X_win and y_win
+                X_res, y_res = sm.fit_resample(X_win, y_win)
+
+                # Extract all windows of this class after SMOTE
+                mask_res = (y_res == cls)
+                X_cls_all = X_res[mask_res]
+
+                # Keep only the first tgt_n windows
+                X_cls_sel = X_cls_all[:tgt_n]
+
+                # If jitter switch is on, add small Gaussian jitter to these synthetic samples
+                if USE_JITTER_OVERSAMPLING:
+                    print(f"[JITTER] Applying Gaussian jitter to SMOTE samples for class {cls}, shape={X_cls_sel.shape}")
+                    # rng is defined at the start of the function: rng = np.random.default_rng(random_state)
+                    noise = rng.normal(0, sigma, size=X_cls_sel.shape)
+                    X_cls_sel = X_cls_sel + noise
+
+                # Add selected windows to the final list
+                X_parts.append(X_cls_sel)
+                y_parts.append(np.full(tgt_n, cls))
 
 
+    # 6) Concatenate all class parts
+    X_final = np.vstack(X_parts)
+    y_final = np.hstack(y_parts)
 
+    return X_final, y_final

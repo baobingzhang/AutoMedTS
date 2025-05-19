@@ -76,7 +76,7 @@ class SimpleClassificationPipeline(BasePipeline, ClassifierMixin):
         steps=None,
         dataset_properties=None,
         include=None,
-        exclude=["qda", "bernoulli_nb", "multinomial_nb", "lda", "sgd"], 
+        exclude=None, 
         random_state: Optional[Union[int, np.random.RandomState]] = None,
         init_params=None,
     ):
@@ -263,11 +263,11 @@ class SimpleClassificationPipeline(BasePipeline, ClassifierMixin):
             "decision_tree",
             "extra_trees",
             "gradient_boosting",
-            "k_nearest_neighbors",
+            # "k_nearest_neighbors",
             "libsvm_svc",
             "mlp",
             "random_forest",
-            "gaussian_nb",
+            # "gaussian_nb",
         ]
         feature_learning = [
             "kernel_pca",

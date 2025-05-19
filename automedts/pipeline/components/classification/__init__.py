@@ -3,6 +3,8 @@ __author__ = "feurerm"
 from typing import Type
 
 import os
+import sys
+from pprint import pprint
 from collections import OrderedDict
 
 from ConfigSpace.configuration_space import ConfigurationSpace
@@ -19,9 +21,12 @@ from ..base import (
 )
 
 classifier_directory = os.path.split(__file__)[0]
+
 _classifiers = find_components(
     __package__, classifier_directory, automedtsClassificationAlgorithm
 )
+
+
 additional_components = ThirdPartyComponents(automedtsClassificationAlgorithm)
 _addons["classification"] = additional_components
 
@@ -114,7 +119,7 @@ class ClassifierChoice(automedtsChoice):
             raise ValueError("No classifiers found")
 
         if default is None:
-            defaults = ["random_forest", "liblinear_svc", "sgd", "libsvm_svc"] + list(
+            defaults = ["random_forest", "mlp", "adaboost", "gradient_boosting"] + list(
                 available_estimators.keys()
             )
             for default_ in defaults:

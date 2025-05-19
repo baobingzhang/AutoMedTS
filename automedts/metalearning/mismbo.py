@@ -2,6 +2,9 @@
 
 import time
 
+import logging
+
+
 from automedts.constants import (
     MULTICLASS_CLASSIFICATION,
     MULTILABEL_CLASSIFICATION,

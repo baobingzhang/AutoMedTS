@@ -23,6 +23,7 @@ from smac.scenario.scenario import Scenario
 from smac.tae.dask_runner import DaskParallelRunner
 from smac.tae.serial_runner import SerialRunner
 
+
 import automedts.metalearning
 from automedts.constants import (
     BINARY_CLASSIFICATION,
@@ -46,6 +47,7 @@ from automedts.metrics import Scorer
 from automedts.util.logging_ import get_named_client_logger
 from automedts.util.parallel import preload_modules
 from automedts.util.stopwatch import StopWatch
+
 
 EXCLUDE_META_FEATURES_CLASSIFICATION = {
     "Landmark1NN",

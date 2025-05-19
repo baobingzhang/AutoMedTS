@@ -14,6 +14,11 @@ from typing import Any, Dict, Optional, Type
 
 import yaml
 
+logging.getLogger("Client").setLevel(logging.ERROR)
+logging.getLogger("SMAC").setLevel(logging.ERROR)
+logging.getLogger("AutoMLSMBO").setLevel(logging.ERROR)
+logging.getLogger("autosklearn").setLevel(logging.ERROR)
+
 
 def setup_logger(
     output_dir: str,
