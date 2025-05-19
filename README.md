@@ -7,6 +7,9 @@
 
 
 # AutoMedTS
+<p align="center">
+  <img src="docs/images/workflow.jpg" alt="AutoMedTS Workflow" width="800"/>
+</p>
 
 > **Automating Clinical Time Series Intelligence**  
 > An end-to-end automated ML framework tailored for clinical time-series data. Streamline data preprocessing, model selection, hyperparameter optimization, and uncertainty-aware ensembling—minimal manual effort required. Originally developed to deliver real-time action recognition and feedback
