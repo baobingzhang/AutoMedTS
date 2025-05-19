@@ -34,6 +34,32 @@ in laparoscopic surgery training. It integrates multiple class-imbalance handlin
 
 ---
 
+## Quick Start Example
+
+```python
+import os
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from automedts.classification import automedtsClassifier
+
+# Load one novice trajectory file
+data = pd.read_csv(os.path.join('data', 'surgical_trajectory', 'novice.csv'))
+X, y = data.iloc[:, :-1].values, data.iloc[:, -1].values
+
+# Split into train/test
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.5, random_state=42
+)
+
+# Train AutoMedTS classifier (automatically applies sliding-window)
+automl = automedtsClassifier(time_left_for_this_task=3600, per_run_time_limit=360)
+automl.fit(X_train, y_train)
+
+# Predict and evaluate
+y_pred, y_win = automl.predict(X_test, y=y_test)
+print("Accuracy:", accuracy_score(y_win, y_pred))
+print(classification_report(y_win, y_pred))
 
 
 
