@@ -19,7 +19,7 @@ in laparoscopic surgery training. It integrates multiple class-imbalance handlin
 
 ## 🚀 Key Features
 
-- **One-Click Pipeline**  
+- **Instant Pipeline**  
   From raw time-series to deployable model in a single `fit()` call.
 - **Advanced Imbalance Handling**  
   SMOTE, temperature-scaled Softmax, power-law mapping, jitter augmentation.
